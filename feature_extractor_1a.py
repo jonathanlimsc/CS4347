@@ -4,6 +4,7 @@ import scipy.io.wavfile
 import numpy as np
 import math
 
+# Global constants
 SOURCE_DIR = 'music_speech/'
 CONVERSION_CONST = 32768.0
 
@@ -13,6 +14,8 @@ def extract_features(input_file, output_file):
     The audio file is read and its audio features extracted (Root-mean-squared,
     Peak-to-average, Zero Crossing, Median Absolute Deviation, Mean Absolute Deviation)
     Writes the audio file path and the audio feature calculated values into a CSV output file.
+    Output string format per audio file:
+    <audio_file_path>,feature1,feature2,...,featureN
     '''
     with open(input_file, 'r') as in_file:
         with open(output_file, 'w') as out_file:
@@ -20,8 +23,10 @@ def extract_features(input_file, output_file):
                 file_name, label = line.split('\t')
                 rate, arr = scipy.io.wavfile.read(SOURCE_DIR + file_name)
                 converted = [x/CONVERSION_CONST for x in arr]
+
+                # Feature extraction methods
                 rms = root_mean_squared(converted)
-                pta = peak_to_ave(rms, converted)
+                pta = peak_to_ave(converted, rms)
                 zc = zero_cross(converted)
                 mad = median_abs_dev(converted)
                 mean_ad = mean_abs_dev(converted)
@@ -36,19 +41,28 @@ def extract_features(input_file, output_file):
     in_file.close()
 
 def root_mean_squared(data):
+    '''
+    Returns the root-mean-squared value of a list of data values
+    '''
     sum = 0
     for num in data:
         sum += num*num
     rms = math.sqrt(sum / float(len(data)))
-    print "root mean squared: " + str(rms)
     return rms
 
-def peak_to_ave(rms, data):
-    pta = max(data) / rms
-    print "peak to ave: " + str(pta)
+def peak_to_ave(data, rms=None):
+    '''
+    Returns the peak-to-average ratio of a list of data values, given their root-mean-squared value
+    '''
+    if rms == None:
+        rms = root_mean_squared(data)
+    pta = max([math.fabs(x) for x in data]) / float(rms)
     return pta
 
 def zero_cross(data):
+    '''
+    Returns the zero-crossing value of a list of data values
+    '''
     sum = 0
     for idx in range(1, len(data)):
         x = data[idx]
@@ -57,26 +71,28 @@ def zero_cross(data):
         if prod < 0:
             sum += 1
     zero_cross = sum / float((len(data)-1))
-    print "Zero cross: " + str(zero_cross)
     return zero_cross
 
 def median_abs_dev(data):
+    '''
+    Returns the median absolute deviation value of a list of data values
+    '''
     median = np.median(data)
     dev_arr = [math.fabs(x-median) for x in data]
     mad = np.median(dev_arr)
-    print "Median abs dev: " + str(mad)
     return mad
 
 def mean_abs_dev(data):
+    '''
+    Returns the mean absolute deviation value of a list of data values
+    '''
     n = len(data)
     mean = sum(data) / float(n)
     total = 0
     for x in data:
         total += math.fabs(x-mean)
     mad = total / float(n)
-    print "Mean abs dev: " + str(mad)
     return mad
-
 
 def usage():
     print "Usage: " + sys.argv[0] + " -i <input_file_path> -o <output_file_path>"
