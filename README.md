@@ -20,3 +20,8 @@ Hence, each audio file will be represented as a list of mean and std values.
 An output string will be written to the output_file in this format:
 feature1_mean,feature2_mean,...,featureN_mean,feature1_std,feature2_std,...,featureN_std,label
 
+
+# Assignment 2
+
+Similar to Assignment 1 with different features.
+
