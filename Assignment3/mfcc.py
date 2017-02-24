@@ -5,6 +5,7 @@ import scipy.signal
 import scipy.fftpack
 import numpy as np
 import math
+import matplotlib.pyplot as plt
 
 # Global constants
 SOURCE_DIR = '../../music_speech/'
@@ -15,16 +16,58 @@ NUM_FEATURES = 5
 L_VALUE = 0.85
 NUM_FILTER_BANKS = 26
 HEADER = '''@RELATION music_speech
-@ATTRIBUTE SC_MEAN NUMERIC
-@ATTRIBUTE SRO_MEAN NUMERIC
-@ATTRIBUTE SFM_MEAN NUMERIC
-@ATTRIBUTE PARFFT_MEAN NUMERIC
-@ATTRIBUTE FLUX_MEAN NUMERIC
-@ATTRIBUTE SC_STD NUMERIC
-@ATTRIBUTE SRO_STD NUMERIC
-@ATTRIBUTE SFM_STD NUMERIC
-@ATTRIBUTE PARFFT_STD NUMERIC
-@ATTRIBUTE FLUX_STD NUMERIC
+@ATTRIBUTE F1_MEAN NUMERIC
+@ATTRIBUTE F2_MEAN NUMERIC
+@ATTRIBUTE F3_MEAN NUMERIC
+@ATTRIBUTE F4_MEAN NUMERIC
+@ATTRIBUTE F5_MEAN NUMERIC
+@ATTRIBUTE F6_MEAN NUMERIC
+@ATTRIBUTE F7_MEAN NUMERIC
+@ATTRIBUTE F8_MEAN NUMERIC
+@ATTRIBUTE F9_MEAN NUMERIC
+@ATTRIBUTE F10_MEAN NUMERIC
+@ATTRIBUTE F11_MEAN NUMERIC
+@ATTRIBUTE F12_MEAN NUMERIC
+@ATTRIBUTE F13_MEAN NUMERIC
+@ATTRIBUTE F14_MEAN NUMERIC
+@ATTRIBUTE F15_MEAN NUMERIC
+@ATTRIBUTE F16_STD NUMERIC
+@ATTRIBUTE F17_STD NUMERIC
+@ATTRIBUTE F18_MEAN NUMERIC
+@ATTRIBUTE F19_MEAN NUMERIC
+@ATTRIBUTE F20_MEAN NUMERIC
+@ATTRIBUTE F21_MEAN NUMERIC
+@ATTRIBUTE F22_MEAN NUMERIC
+@ATTRIBUTE F23_MEAN NUMERIC
+@ATTRIBUTE F24_MEAN NUMERIC
+@ATTRIBUTE F25_MEAN NUMERIC
+@ATTRIBUTE F26_MEAN NUMERIC
+@ATTRIBUTE F1_STD NUMERIC
+@ATTRIBUTE F2_STD NUMERIC
+@ATTRIBUTE F3_STD NUMERIC
+@ATTRIBUTE F4_STD NUMERIC
+@ATTRIBUTE F5_STD NUMERIC
+@ATTRIBUTE F6_STD NUMERIC
+@ATTRIBUTE F7_STD NUMERIC
+@ATTRIBUTE F8_STD NUMERIC
+@ATTRIBUTE F9_STD NUMERIC
+@ATTRIBUTE F10_STD NUMERIC
+@ATTRIBUTE F11_STD NUMERIC
+@ATTRIBUTE F12_STD NUMERIC
+@ATTRIBUTE F13_STD NUMERIC
+@ATTRIBUTE F14_STD NUMERIC
+@ATTRIBUTE F15_STD NUMERIC
+@ATTRIBUTE F16_STD NUMERIC
+@ATTRIBUTE F17_STD NUMERIC
+@ATTRIBUTE F18_MEAN NUMERIC
+@ATTRIBUTE F19_MEAN NUMERIC
+@ATTRIBUTE F20_MEAN NUMERIC
+@ATTRIBUTE F21_MEAN NUMERIC
+@ATTRIBUTE F22_MEAN NUMERIC
+@ATTRIBUTE F23_MEAN NUMERIC
+@ATTRIBUTE F24_MEAN NUMERIC
+@ATTRIBUTE F25_MEAN NUMERIC
+@ATTRIBUTE F26_MEAN NUMERIC
 @ATTRIBUTE class {music,speech}
 
 @DATA
@@ -70,7 +113,7 @@ def build_feature_matrix(data, rate):
     Builds a feature matrix from a file's array representation, data.
     num_buffers denote the number of sub-arrays of data for which
     feature extraction will be done. Hence, the resulting matrix will be
-    of shape(num_buffers, NUM_FEATURES)
+    of shape(num_buffers, NUM_FILTER_BANKS)
     '''
     # Calculate number of buffers
     step_size = int(WINDOW_SIZE * STEP_SIZE_RATIO)
@@ -81,9 +124,8 @@ def build_feature_matrix(data, rate):
     else:
         num_buffers = data_length / step_size
 
-    feature_mtx = np.zeros((num_buffers, NUM_FEATURES))
+    feature_mtx = np.zeros((num_buffers, NUM_FILTER_BANKS))
     row_idx = 0
-    prev_data = None
 
     for idx in range(0, len(data), step_size):
         buffer_data = data[idx:idx+WINDOW_SIZE]
@@ -92,35 +134,28 @@ def build_feature_matrix(data, rate):
             continue
         filtered_data = preemphasis_filter(buffer_data)
         hammed_data = apply_hamming_window(filtered_data)
-        transformed_data = transform_data(hammed_data)
-        # Power spectrum of frame
-        power_spectrum = periodogram_spectral_estimate(transformed_data)
-        filter_banks, bins = mel_freq_filter(transformed_data, rate)
-        filter_bank_energies = get_filter_bank_energies(power_spectrum, filter_banks, bins)
 
+        # FFT
+        transformed_data = transform_data(hammed_data)
+
+        # Power spectrum of frame
+        # power_spectrum = periodogram_spectral_estimate(transformed_data)
+        filter_banks, bins = mel_freq_filter(transformed_data, rate)
+        filter_bank_energies = get_filter_bank_energies(transformed_data, filter_banks, bins)
         # Take the log on the energies
         log_filter_bank_energies = np.log10(filter_bank_energies)
 
         # DCT
-        dct = scipy.fftpack.dct(log_filter_bank_energies, norm='ortho')
-        print "DCT"
-        print dct
-        print np.shape(dct)
-        # Feature extraction methods
-        sc = spectral_centroid(transformed_data)
-        sro = spectral_rolloff(transformed_data)
-        sfm = spectral_flatness_measure(transformed_data)
-        parfft = peak_to_ave(transformed_data)
-        sf = spectral_flux(prev_data, transformed_data)
-
-        # Save current buffer for the next iteration (for spectral flux calculation)
-        prev_data = transformed_data
-
-        feature_mtx[row_idx] = [sc, sro, sfm, parfft, sf]
+        dct = scipy.fftpack.dct(log_filter_bank_energies)
+        feature_mtx[row_idx] = dct
         row_idx += 1
+
     return feature_mtx
 
 def preemphasis_filter(data):
+    '''
+    Applies a preemphasis filter on a buffer/window
+    '''
     n = len(data)
     result = []
     for idx in range(n):
@@ -142,30 +177,87 @@ def apply_hamming_window(data):
 
     return data
 
-def mel_freq_filter(data, rate):
+def mel_freq_filter(data, rate, plot_filters=False):
+    '''
+    Generates NUM_FILTER_BANKS number of filters given an array of audio data that had
+    gone through FFT
+    :param data - FFT data
+    :param rate - sampling rate
+    :param plot_filters - optional plotting of filters
+    '''
     max_mel = freq_to_mel(rate/2.0)
     min_mel = freq_to_mel(0.0)
     step = (max_mel - min_mel) * 1.0 / (NUM_FILTER_BANKS + 1)
     # mel_values = f_range(min_mel, max_mel, step)
+    # 28 mel values
     mel_values = np.linspace(min_mel, max_mel, NUM_FILTER_BANKS + 2)
     # Convert the mel values to freqs
     freqs = [mel_to_freq(m) for m in mel_values]
-    # Convert the freqs into integer FFT bins
-    num_fft_bins = WINDOW_SIZE / 2 + 1
-    bins = [math.floor((num_fft_bins+1) * (f/rate)) for f in freqs]
 
+    # Convert the freqs into integer FFT bins
+    num_fft_bins = WINDOW_SIZE / 2
+    # Convert freqs proportionately into floats with num_fft_bins as max value
+    bins = [num_fft_bins * (f/(0.5 * rate)) for f in freqs]
     filter_bank = np.zeros([NUM_FILTER_BANKS, num_fft_bins])
+
+    rounded_bins = []
+    amp_vals = []
 
     for filter_bank_idx in range(0, NUM_FILTER_BANKS):
         # Left-side of the triangle
-        for y in range(int(bins[filter_bank_idx]), int(bins[filter_bank_idx+1])):
-            filter_bank[filter_bank_idx, y] = (y - bins[filter_bank_idx]) / (bins[filter_bank_idx+1] - bins[filter_bank_idx])
-        # Right-side of the triangle
-        for y in range(int(bins[filter_bank_idx+1]), int(bins[filter_bank_idx+2])):
-            filter_bank[filter_bank_idx, y] = (bins[filter_bank_idx+2] - y) / (bins[filter_bank_idx+2] - bins[filter_bank_idx+1])
+        left_point = int(np.floor(bins[filter_bank_idx]))
+        top_point = int(np.ceil(bins[filter_bank_idx+1]))
+        right_point = int(np.ceil(bins[filter_bank_idx+2]))
+        rounded_bins.append([left_point, right_point])
+        col_idx = 0
+        for y in range(left_point, top_point):
+            filter_bank[filter_bank_idx, col_idx] = (y - left_point) * 1.0 / (top_point - left_point)
+            col_idx += 1
+        # Top and Right-side of the triangle
+        for y in range(top_point, right_point+1):
+            filter_bank[filter_bank_idx, col_idx] = (right_point - y) * 1.0 / (right_point - top_point)
+            col_idx += 1
+
+        amp_vals.append(filter_bank[filter_bank_idx][0:col_idx])
+
+    if plot_filters:
+        plot_filters(rounded_bins, amp_vals, rate)
 
     return filter_bank, bins
 
+def plot_filters(bins, amp_vals, rate, truncate=False, markers=False):
+    '''
+    Plots the mfcc filters. The integer bin values are reconverted back into frequency values.
+    This is because we want to take into account the floor, ceiling and rounding that happened for the integer bins.
+    :params bins - Rounded integer bin values that will be converted to frequency values for the x-axis
+    :params amp_vals - Amplitude values for the y-axis, corresponding to the filter ie. filter 1 values are found in
+        amp_vals[1]
+    :params truncate - Optional truncation to 300Hz window
+    :params markers - Optional plotting of lines with markers
+    '''
+
+    for filter_idx in range(NUM_FILTER_BANKS):
+        min_val = bins[filter_idx][0]
+        max_val = bins[filter_idx][1]
+        x_range = [int_to_freq(val, rate) for val in range(min_val, max_val+1)]
+        y_range = amp_vals[filter_idx]
+        if markers:
+            plt.plot(x_range, y_range, marker='o')
+        else:
+            plt.plot(x_range, y_range)
+
+    x_max = np.ceil(rate / 2.0 / 1000) * 1000
+    plt.axis([0, x_max, 0, 1.0])
+    plt.title('26 Triangular MFCC filters, 22050Hz signal, window size 1024')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Amplitude')
+    if truncate:
+        plt.xlim([0,300])
+    plt.show()
+
+def int_to_freq(num, rate):
+    num_fft_bins = WINDOW_SIZE * 0.5
+    return num * rate * 0.5 / num_fft_bins
 
 def f_range(start, stop, step):
     '''
@@ -182,9 +274,15 @@ def f_range(start, stop, step):
     return values
 
 def freq_to_mel(freq):
+    '''
+    Converts a frequency value to a mel value on the mel-scale
+    '''
     return 1127 * math.log(1 + freq/700.0)
 
 def mel_to_freq(mel):
+    '''
+    Converts a mel value on the mel-scale to frequency value
+    '''
     return 700 * (math.exp(mel/1127.0) - 1)
 
 def transform_data(data):
@@ -193,13 +291,13 @@ def transform_data(data):
     Only N/2 positive values are kept (index 0 to N/2+1, data[0] = 0)
     Returns the array of values after conversion to their absolute values
     '''
-    # DFT, taking only positive elements (0:N/2+1)
-    transformed_data = scipy.fftpack.fft(data)[:WINDOW_SIZE/2 + 1]
+    # DFT, taking only positive elements (0:N/2)
+    transformed_data = scipy.fftpack.fft(data)[:WINDOW_SIZE/2+1]
     # Convert all values to absolute
     return [np.abs(x) for x in transformed_data]
 
 def periodogram_spectral_estimate(data):
-    return [1.0 / WINDOW_SIZE * x**2 for x in data]
+    return [1.0 / (WINDOW_SIZE/2+1) * x**2 for x in data]
 
 def get_filter_bank_energies(power_spectrum, filter_banks, bins):
     '''
@@ -209,76 +307,37 @@ def get_filter_bank_energies(power_spectrum, filter_banks, bins):
     :param bins is a single frame's integer FFT bin values
     Returns an array of filter bank energies, one value for each filter
     '''
+
     filter_bank_energies = []
     for f_idx in range(0, NUM_FILTER_BANKS):
         # Energy sum for this filter bank
          energy_sum = 0
+         left_point = int(np.floor(bins[f_idx]))
+         right_point = int(np.ceil(bins[f_idx+2]))
+         spread = right_point - left_point + 1
+
         # For every integer from this bin value to the value of 2 bins after
-         for x_idx in range(int(bins[f_idx]), int(bins[f_idx+2])):
-             energy_sum += power_spectrum[x_idx] * filter_banks[f_idx][x_idx]
+         for x_idx in range(0, spread):
+             energy_sum += power_spectrum[left_point + x_idx] * filter_banks[f_idx][x_idx]
+
          filter_bank_energies.append(energy_sum)
 
     return filter_bank_energies
 
 def generate_stats(feature_mtx):
     '''
-    Given a file's feature matrix, generate a stats array of shape(1, NUM_FEATURES*2)
+    Given a file's feature matrix, generate a stats array of shape(1, NUM_FILTER_BANKS*2)
     with the format [feature1_mean, feature2_mean, ..., featureN_mean, feature1_std, feature2_std, ..., featureN_std]
     '''
     mean_arr = []
     std_arr = []
-    for col in range(NUM_FEATURES):
+    for col in range(NUM_FILTER_BANKS):
         feature_data = feature_mtx[:, col]
         mean_arr.append(mean(feature_data))
         std_arr.append(std(feature_data))
 
     file_stats = mean_arr + std_arr
     return file_stats
-
-def spectral_centroid(data):
-    n = len(data)
-    sum_top = 0
-    sum_bottom = 0
-    for idx in range(n):
-        sum_top += idx * data[idx]
-        sum_bottom += data[idx]
-
-    return sum_top / float(sum_bottom)
-
-def spectral_rolloff(data):
-    n = len(data)
-    l_energy = 0
-    for idx in range(n):
-        l_energy += L_VALUE * data[idx]
-    sum = 0
-    sro = 0
-    for idx in range(n):
-        sum += np.abs(data[idx])
-        if sum >= l_energy:
-            sro = idx
-            break
-    return sro
-
-def spectral_flatness_measure(data):
-    n = len(data)
-    top = np.exp(1.0/n * sum(np.log(data)))
-    bottom = 1.0/n * sum(data)
-    return top / float(bottom)
-
-def spectral_flux(data_0, data_1):
-    '''
-    Returns the spectral flux of data_1 given both data_1 (the current buffer) and data_0 (the preceding buffer)
-    '''
-    n = len(data_1)
-    if data_0 is None:
-        data_0 = np.zeros(n)
-
-    flux = 0
-    for idx in range(n):
-        diff = data_1[idx] - data_0[idx]
-        if diff > 0:
-            flux += diff
-    return flux
 
 def mean(data):
     '''

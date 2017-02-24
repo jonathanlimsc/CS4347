@@ -1,11 +1,6 @@
-def f_range(start, stop, step):
-    sum_val = 0
-    values = []
-    while sum_val < stop:
-        values.append(sum_val)
-        sum_val += step
-    values.append(stop)
-    print values
-    return values
+def blep():
+    return ["element 0","element 1"]
+def useBlep():
+    return blep()[1]
 
-f_range(0, 10, 2.2)
+print useBlep()
