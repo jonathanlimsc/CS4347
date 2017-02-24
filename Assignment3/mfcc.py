@@ -31,8 +31,8 @@ HEADER = '''@RELATION music_speech
 @ATTRIBUTE F13_MEAN NUMERIC
 @ATTRIBUTE F14_MEAN NUMERIC
 @ATTRIBUTE F15_MEAN NUMERIC
-@ATTRIBUTE F16_STD NUMERIC
-@ATTRIBUTE F17_STD NUMERIC
+@ATTRIBUTE F16_MEAN NUMERIC
+@ATTRIBUTE F17_MEAN NUMERIC
 @ATTRIBUTE F18_MEAN NUMERIC
 @ATTRIBUTE F19_MEAN NUMERIC
 @ATTRIBUTE F20_MEAN NUMERIC
@@ -59,15 +59,15 @@ HEADER = '''@RELATION music_speech
 @ATTRIBUTE F15_STD NUMERIC
 @ATTRIBUTE F16_STD NUMERIC
 @ATTRIBUTE F17_STD NUMERIC
-@ATTRIBUTE F18_MEAN NUMERIC
-@ATTRIBUTE F19_MEAN NUMERIC
-@ATTRIBUTE F20_MEAN NUMERIC
-@ATTRIBUTE F21_MEAN NUMERIC
-@ATTRIBUTE F22_MEAN NUMERIC
-@ATTRIBUTE F23_MEAN NUMERIC
-@ATTRIBUTE F24_MEAN NUMERIC
-@ATTRIBUTE F25_MEAN NUMERIC
-@ATTRIBUTE F26_MEAN NUMERIC
+@ATTRIBUTE F18_STD NUMERIC
+@ATTRIBUTE F19_STD NUMERIC
+@ATTRIBUTE F20_STD NUMERIC
+@ATTRIBUTE F21_STD NUMERIC
+@ATTRIBUTE F22_STD NUMERIC
+@ATTRIBUTE F23_STD NUMERIC
+@ATTRIBUTE F24_STD NUMERIC
+@ATTRIBUTE F25_STD NUMERIC
+@ATTRIBUTE F26_STD NUMERIC
 @ATTRIBUTE class {music,speech}
 
 @DATA
@@ -140,8 +140,9 @@ def build_feature_matrix(data, rate):
 
         # Power spectrum of frame
         # power_spectrum = periodogram_spectral_estimate(transformed_data)
-        filter_banks, bins = mel_freq_filter(transformed_data, rate)
-        filter_bank_energies = get_filter_bank_energies(transformed_data, filter_banks, bins)
+        filter_banks, bins = mel_freq_filter(rate, plot_filter=False)
+        filter_bank_energies = get_filter_bank_energies(transformed_data, filter_banks)
+
         # Take the log on the energies
         log_filter_bank_energies = np.log10(filter_bank_energies)
 
@@ -177,17 +178,16 @@ def apply_hamming_window(data):
 
     return data
 
-def mel_freq_filter(data, rate, plot_filters=False):
+def mel_freq_filter(rate, plot_filter=False):
     '''
     Generates NUM_FILTER_BANKS number of filters given an array of audio data that had
     gone through FFT
-    :param data - FFT data
     :param rate - sampling rate
     :param plot_filters - optional plotting of filters
     '''
     max_mel = freq_to_mel(rate/2.0)
     min_mel = freq_to_mel(0.0)
-    step = (max_mel - min_mel) * 1.0 / (NUM_FILTER_BANKS + 1)
+    # step = (max_mel - min_mel) * 1.0 / (NUM_FILTER_BANKS + 1)
     # mel_values = f_range(min_mel, max_mel, step)
     # 28 mel values
     mel_values = np.linspace(min_mel, max_mel, NUM_FILTER_BANKS + 2)
@@ -195,51 +195,45 @@ def mel_freq_filter(data, rate, plot_filters=False):
     freqs = [mel_to_freq(m) for m in mel_values]
 
     # Convert the freqs into integer FFT bins
-    num_fft_bins = WINDOW_SIZE / 2
+    num_fft_bins = get_num_fft_bins()
     # Convert freqs proportionately into floats with num_fft_bins as max value
-    bins = [num_fft_bins * (f/(0.5 * rate)) for f in freqs]
+    bins = [(num_fft_bins-1) * (f/(0.5 * rate)) for f in freqs]
     filter_bank = np.zeros([NUM_FILTER_BANKS, num_fft_bins])
 
-    rounded_bins = []
     amp_vals = []
 
     for filter_bank_idx in range(0, NUM_FILTER_BANKS):
         # Left-side of the triangle
         left_point = int(np.floor(bins[filter_bank_idx]))
-        top_point = int(np.ceil(bins[filter_bank_idx+1]))
+        top_point = int(np.round(bins[filter_bank_idx+1]))
         right_point = int(np.ceil(bins[filter_bank_idx+2]))
-        rounded_bins.append([left_point, right_point])
-        col_idx = 0
+
         for y in range(left_point, top_point):
-            filter_bank[filter_bank_idx, col_idx] = (y - left_point) * 1.0 / (top_point - left_point)
-            col_idx += 1
+            filter_bank[filter_bank_idx, y] = (y - left_point) * 1.0 / (top_point - left_point)
         # Top and Right-side of the triangle
-        for y in range(top_point, right_point+1):
-            filter_bank[filter_bank_idx, col_idx] = (right_point - y) * 1.0 / (right_point - top_point)
-            col_idx += 1
+        for y in range(top_point, right_point):
+            filter_bank[filter_bank_idx, y] = (right_point - y) * 1.0 / (right_point - top_point)
 
-        amp_vals.append(filter_bank[filter_bank_idx][0:col_idx])
+        amp_vals.append(filter_bank[filter_bank_idx])
 
-    if plot_filters:
-        plot_filters(rounded_bins, amp_vals, rate)
+    if plot_filter:
+        plot_filters(amp_vals, num_fft_bins, rate)
 
     return filter_bank, bins
 
-def plot_filters(bins, amp_vals, rate, truncate=False, markers=False):
+def plot_filters(amp_vals, num_fft_bins, rate, truncate=False, markers=False):
     '''
     Plots the mfcc filters. The integer bin values are reconverted back into frequency values.
     This is because we want to take into account the floor, ceiling and rounding that happened for the integer bins.
-    :params bins - Rounded integer bin values that will be converted to frequency values for the x-axis
     :params amp_vals - Amplitude values for the y-axis, corresponding to the filter ie. filter 1 values are found in
         amp_vals[1]
+    :params num_fft_bins - Number of fft bins
     :params truncate - Optional truncation to 300Hz window
     :params markers - Optional plotting of lines with markers
     '''
 
     for filter_idx in range(NUM_FILTER_BANKS):
-        min_val = bins[filter_idx][0]
-        max_val = bins[filter_idx][1]
-        x_range = [int_to_freq(val, rate) for val in range(min_val, max_val+1)]
+        x_range = [int_to_freq(val, rate) for val in range(0, num_fft_bins)]
         y_range = amp_vals[filter_idx]
         if markers:
             plt.plot(x_range, y_range, marker='o')
@@ -256,8 +250,7 @@ def plot_filters(bins, amp_vals, rate, truncate=False, markers=False):
     plt.show()
 
 def int_to_freq(num, rate):
-    num_fft_bins = WINDOW_SIZE * 0.5
-    return num * rate * 0.5 / num_fft_bins
+    return num * rate * 0.5 / (get_num_fft_bins())
 
 def f_range(start, stop, step):
     '''
@@ -291,7 +284,7 @@ def transform_data(data):
     Only N/2 positive values are kept (index 0 to N/2+1, data[0] = 0)
     Returns the array of values after conversion to their absolute values
     '''
-    # DFT, taking only positive elements (0:N/2)
+    # DFT, taking only positive elements (0:N/2+1)
     transformed_data = scipy.fftpack.fft(data)[:WINDOW_SIZE/2+1]
     # Convert all values to absolute
     return [np.abs(x) for x in transformed_data]
@@ -299,7 +292,7 @@ def transform_data(data):
 def periodogram_spectral_estimate(data):
     return [1.0 / (WINDOW_SIZE/2+1) * x**2 for x in data]
 
-def get_filter_bank_energies(power_spectrum, filter_banks, bins):
+def get_filter_bank_energies(power_spectrum, filter_banks):
     '''
     :param power_spectrum is a single frame's power_spectrum
     :param filter_banks is a single frame's filter_banks. Each row
@@ -308,21 +301,10 @@ def get_filter_bank_energies(power_spectrum, filter_banks, bins):
     Returns an array of filter bank energies, one value for each filter
     '''
 
-    filter_bank_energies = []
-    for f_idx in range(0, NUM_FILTER_BANKS):
-        # Energy sum for this filter bank
-         energy_sum = 0
-         left_point = int(np.floor(bins[f_idx]))
-         right_point = int(np.ceil(bins[f_idx+2]))
-         spread = right_point - left_point + 1
+    return np.dot(power_spectrum, filter_banks.T)
 
-        # For every integer from this bin value to the value of 2 bins after
-         for x_idx in range(0, spread):
-             energy_sum += power_spectrum[left_point + x_idx] * filter_banks[f_idx][x_idx]
-
-         filter_bank_energies.append(energy_sum)
-
-    return filter_bank_energies
+def get_num_fft_bins():
+    return WINDOW_SIZE / 2 + 1;
 
 def generate_stats(feature_mtx):
     '''
