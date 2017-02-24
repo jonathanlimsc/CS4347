@@ -28,3 +28,4 @@ Similar to Assignment 1 with different features.
 # Assignment 3
 
 Generate MFCC for each audio file by using 26 mel-spaced filters.
+Refs: http://practicalcryptography.com/miscellaneous/machine-learning/guide-mel-frequency-cepstral-coefficients-mfccs/#computing-the-mel-filterbank
