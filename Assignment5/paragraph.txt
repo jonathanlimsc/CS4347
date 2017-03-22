@@ -1,0 +1,2 @@
+There is no significant difference between the perfect waveform and the sine-wave generated waveform, apart from a slight buzzing I detected from the perfect wave.
+The loudness and pitch of the two waves are virtually indistinguishable from each other.

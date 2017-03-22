@@ -1,0 +1,5 @@
+Frequency			Interpolation			16384-sample			2048-sample
+100Hz 				 No 							 6.100076 				 49.216563
+							 Linear 					 0.000599 				 0.038505
+1234.56Hz 		 No 							 6.281393 				 50.232451
+							 Linear 					 0.000602 				 0.038551
